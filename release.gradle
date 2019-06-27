@@ -18,33 +18,6 @@ def getMavenRepositoryPassword() {
 }
 
 afterEvaluate { project ->
-    task androidJavadoc(type: Javadoc) {
-        source = android.sourceSets.main.java.srcDirs
-        classpath += files(android.bootClasspath)
-    }
-
-    task androidJavadocJar(type: Jar) {
-        classifier = 'javadoc'
-        from androidJavadoc.destinationDir
-    }
-
-    task androidSourcesJar(type: Jar) {
-        classifier = 'sources'
-        from android.sourceSets.main.java.srcDirs
-    }
-
-    android.libraryVariants.all { variant ->
-        def name = variant.name.capitalize()
-        task "jar${name}"(type: Jar, dependsOn: variant.javaCompile) {
-            from variant.javaCompile.destinationDir
-        }
-    }
-
-    artifacts {
-        archives androidJavadocJar
-        archives androidSourcesJar
-        archives jarRelease
-    }
 
     signing {
         required { isReleaseBuild() && gradle.taskGraph.hasTask("uploadArchives") }
@@ -54,20 +27,16 @@ afterEvaluate { project ->
     uploadArchives {
         configuration = configurations.archives
         repositories.mavenDeployer {
-            beforeDeployment {
-                MavenDeployment deployment -> signing.signPom(deployment)
-            }
+            beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
 
-            repository(url: getMavenRepositoryUrl()) {
-                authentication(
-                        userName: getMavenRepositoryUsername(),
-                        password: getMavenRepositoryPassword())
+            repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                authentication(userName: getMavenRepositoryUsername(), password: getMavenRepositoryPassword())
             }
 
             pom.project {
                 name 'SubsamplingScaleImageView'
                 packaging 'aar'
-                description 'Custom image views for Android with pinch to zoom, panning, rotation and animation support, with easy extension so you can add your own overlays and touch event detection.'
+                description 'Highly configurable, easily extendable deep zoom view for displaying huge images without loss of detail. Perfect for photo galleries, maps, building plans etc.'
                 url 'https://github.com/davemorrissey/subsampling-scale-image-view'
 
                 scm {
@@ -94,12 +63,30 @@ afterEvaluate { project ->
         }
     }
 
-    task installArchives(type: Upload) {
-        configuration = configurations.archives
-        repositories {
-            mavenDeployer {
-                repository url: "file://${System.properties['user.home']}/.m2/repository"
-            }
-        }
+    task androidJavadocs(type: Javadoc) {
+        onlyIf { gradle.taskGraph.hasTask("uploadArchives") }
+        source = android.sourceSets.main.java.sourceFiles
+        destinationDir = rootProject.file("docs/javadoc")
+        classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
+        classpath += configurations.compile
+        classpath += configurations.javadocs
+        options.noTimestamp = true
+        options.links = ['https://developer.android.com/reference/']
     }
+
+    task androidJavadocsJar(type: Jar, dependsOn: androidJavadocs) {
+        classifier = 'javadoc'
+        from androidJavadocs.destinationDir
+    }
+
+    task androidSourcesJar(type: Jar) {
+        classifier = 'sources'
+        from android.sourceSets.main.java.sourceFiles
+    }
+
+    artifacts {
+        archives androidSourcesJar
+        archives androidJavadocsJar
+    }
+
 }
